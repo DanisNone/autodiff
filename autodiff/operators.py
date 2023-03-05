@@ -28,6 +28,7 @@ class Add(ad.base.BinaryOp):
         return ad.IntConst(1), ad.IntConst(1)
     
     def optimize(self):
+        self = super(Add, self).optimize()
         return MultiAdd([self.x, self.y])
 
 
@@ -56,6 +57,7 @@ class Mul(ad.base.BinaryOp):
         return y, x
 
     def optimize(self):
+        self = super(Mul, self).optimize()
         return MultiMul([self.x, self.y])
 
 
@@ -90,6 +92,7 @@ class Pow(ad.base.BinaryOp):
 
 class MultiAdd(ad.base.MultiOp):
     op = "+"
+    priority = 1
 
     @staticmethod
     def _call(vars):
@@ -98,12 +101,22 @@ class MultiAdd(ad.base.MultiOp):
     @staticmethod
     def _derivative(vars):
         return [ad.IntConst(1) for _ in vars]
+    
+    def optimize(self):
+        self = super(MultiAdd, self).optimize()
+        vars = []
 
+        for var in self.vars:
+            if isinstance(var, MultiAdd):
+                vars.extend(var.vars)
+            else:
+                vars.append(var)
+        return MultiAdd(vars)
 
 
 class MultiMul(ad.base.MultiOp):
     op = "*"
-
+    priority = 2
     @staticmethod
     def _call(vars):
         return math.prod(vars)

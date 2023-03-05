@@ -128,7 +128,7 @@ def to_op(obj: Union[BaseOp, str, float, int]) -> BaseOp:
     if isinstance(obj, int):
         return IntConst(obj)
 
-    raise TypeError("Unsupported type: {type(obj)}")
+    raise TypeError(f"Unsupported type: {type(obj)}")
 
 
 class UnaryOp(BaseOp):
@@ -142,6 +142,9 @@ class UnaryOp(BaseOp):
 
     def derivative(self, var):
         return self._derivative(self.x) * self.x.derivative(var)
+    
+    def optimize(self):
+        return type(self)(self.x.optimize())
     
     def __str__(self):
         s = str(self.x)
@@ -177,6 +180,9 @@ class BinaryOp(BaseOp):
         dx, dy = self._derivative(self.x, self.y)
         return dx * self.x.derivative(var) + dy * self.y.derivative(var)
     
+    def optimize(self):
+        return type(self)(self.x.optimize(), self.y.optimize())
+    
     def __str__(self):
         s1, s2 = str(self.x), str(self.y)
         if isinstance(self.x, BinaryOp):
@@ -202,7 +208,7 @@ class BinaryOp(BaseOp):
 class MultiOp(BaseOp):
     op: str = None  # type: ignore
 
-    def __init__(self, *vars):
+    def __init__(self, vars):
         self.vars = list(map(to_op, vars))
 
     def call(self, vars):
@@ -214,9 +220,25 @@ class MultiOp(BaseOp):
 
         return sum(map(ad.operators.Mul, derivatives, vars))
 
+    def optimize(self):
+        self = type(self)([var.optimize() for var in self.vars])
+        vars = []
+
+        for var in self.vars:
+            if isinstance(var, type(self)):
+                vars.extend(var.vars)
+            else:
+                vars.append(var)
+        return type(self)(vars)
+
     def __str__(self):
-        args_str = " {self.op} ".join(map(str, self.vars))
-        return f"{self.op}({args_str})"
+        res = []
+        for var in self.vars:
+            if var.priority == -1 or var.priority >= self.priority:
+                res.append(f"({var})")
+            else:
+                res.append(f"({var})")
+        return f" {self.op} ".join(res)
 
     def __eq__(self, other):
         return isinstance(other, type(self)) and self.vars == other.vars
