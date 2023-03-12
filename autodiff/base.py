@@ -92,7 +92,7 @@ class Const(BaseOp):
         return IntConst(0)
     
     def optimize(self):
-        if self.value.is_integer():
+        if isinstance(self.value, int) or self.value.is_integer():
             return IntConst(int(self.value))
         return self
     
@@ -206,9 +206,7 @@ class BinaryOp(BaseOp):
         pass
 
 class MultiOp(BaseOp):
-    op: str = None  # type: ignore
-
-    def __init__(self, vars):
+    def __init__(self, vars: List[BaseOp]):
         self.vars = list(map(to_op, vars))
 
     def call(self, vars):
@@ -231,15 +229,6 @@ class MultiOp(BaseOp):
                 vars.append(var)
         return type(self)(vars)
 
-    def __str__(self):
-        res = []
-        for var in self.vars:
-            if var.priority == -1 or var.priority >= self.priority:
-                res.append(f"({var})")
-            else:
-                res.append(f"({var})")
-        return f" {self.op} ".join(res)
-
     def __eq__(self, other):
         return isinstance(other, type(self)) and self.vars == other.vars
 
@@ -252,3 +241,11 @@ class MultiOp(BaseOp):
     @abstractmethod
     def _derivative(vars: List[BaseOp]) -> List[BaseOp]:
         pass
+
+
+def optimize(op: BaseOp) -> BaseOp:
+    while True:
+        new_op = op.optimize()
+        if op == new_op:
+            return op
+        op = new_op

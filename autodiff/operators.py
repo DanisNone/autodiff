@@ -15,6 +15,23 @@ class Neg(ad.base.UnaryOp):
         return ad.IntConst(-1)
 
 
+class Recip(ad.base.UnaryOp):
+    priority = 0
+
+    @staticmethod
+    def _call(x):
+        if x == 0:
+            return float("nan")
+        return 1 / x
+
+    @staticmethod
+    def _derivative(x):
+        return -1 / (x * x)
+
+    def __str__(self):
+        return f"1/({self.x})"
+
+
 class Add(ad.base.BinaryOp):
     op = "+"
     priority = 1
@@ -26,7 +43,7 @@ class Add(ad.base.BinaryOp):
     @staticmethod
     def _derivative(x, y):
         return ad.IntConst(1), ad.IntConst(1)
-    
+
     def optimize(self):
         self = super(Add, self).optimize()
         return MultiAdd([self.x, self.y])
@@ -35,6 +52,7 @@ class Add(ad.base.BinaryOp):
 class Sub(ad.base.BinaryOp):
     op = "-"
     priority = 1
+
     @staticmethod
     def _call(x, y):
         return x - y
@@ -43,12 +61,16 @@ class Sub(ad.base.BinaryOp):
     def _derivative(x, y):
         return ad.IntConst(1), ad.IntConst(-1)
 
+    def optimize(self):
+        self = super(Sub, self).optimize()
+        return MultiAdd([self.x, -self.y])
+
 
 class Mul(ad.base.BinaryOp):
     op = "*"
     priority = 2
 
-    @staticmethod 
+    @staticmethod
     def _call(x, y):
         return x * y
 
@@ -64,6 +86,7 @@ class Mul(ad.base.BinaryOp):
 class Div(ad.base.BinaryOp):
     op = "/"
     priority = 2
+
     @staticmethod
     def _call(x, y):
         if y == 0:
@@ -73,6 +96,10 @@ class Div(ad.base.BinaryOp):
     @staticmethod
     def _derivative(x, y):
         return 1 / y, -x / (y**2)
+    
+    def optimize(self):
+        self = super(Div, self).optimize()
+        return MultiMul([self.x, Recip(self.y)])
 
 
 class Pow(ad.base.BinaryOp):
@@ -97,46 +124,84 @@ class MultiAdd(ad.base.MultiOp):
     @staticmethod
     def _call(vars):
         return sum(vars)
-    
+
     @staticmethod
     def _derivative(vars):
         return [ad.IntConst(1) for _ in vars]
     
     def optimize(self):
         self = super(MultiAdd, self).optimize()
-        vars = []
+        self.vars.sort(key=_isneg)
 
+        return self
+
+    def __str__(self):
+        res = []
         for var in self.vars:
-            if isinstance(var, MultiAdd):
-                vars.extend(var.vars)
+            res.append("-" if _isneg(var) else "+")
+            
+            var = _abs(var)
+            if var.priority == -1 or var.priority >= self.priority:
+                res.append(f"{var}")
             else:
-                vars.append(var)
-        return MultiAdd(vars)
-
+                res.append(f"({var})")
+        
+        if _isrecip(self.vars[0]):
+            res[1] = "-" + res[1]
+        del res[0]
+        return f" ".join(res)
 
 class MultiMul(ad.base.MultiOp):
     op = "*"
     priority = 2
+
     @staticmethod
     def _call(vars):
         return math.prod(vars)
-    
+
     @staticmethod
     def _derivative(vars):
-        derivatives = []
-        for i in range(len(vars)):
-            derivatives.append(MultiMul(vars[:i] + vars[i+1:]))
-        return derivatives
+        return [MultiMul(vars[:i] + vars[i+1:]) for i in range(len(vars))]
+    
+    def optimize(self):
+        self = super(MultiMul, self).optimize()
+        self.vars.sort(key=_isrecip)
 
+        return self
+    
+    def __str__(self):
+        res = []
+        for var in self.vars:
+            res.append("/" if _isrecip(var) else "*")
+            
+            var = _abs_recip(var)
+            if var.priority == -1 or var.priority >= self.priority:
+                res.append(f"{var}")
+            else:
+                res.append(f"({var})")
+        
+        if _isrecip(self.vars[0]):
+            res.insert(0, "1")
+        else:
+            del res[0]
+        return f" ".join(res)
 
-def _isneg(x):
+def _isneg(x: ad.base.BaseOp) -> bool:
     if isinstance(x, ad.Const):
         return x.value < 0
     return isinstance(x, Neg)
 
-def _abs(x):
+def _isrecip(x: ad.base.BaseOp) -> bool:
+    return isinstance(x, Recip)
+
+def _abs(x: ad.base.BaseOp) -> ad.base.BaseOp:
     if isinstance(x, ad.Const):
         return type(x)(abs(x.value))
     if isinstance(x, Neg):
+        return x.x
+    return x
+
+def _abs_recip(x: ad.base.BaseOp) -> ad.base.BaseOp:
+    if isinstance(x, Recip):
         return x.x
     return x

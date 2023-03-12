@@ -2,6 +2,18 @@ import autodiff as ad
 import math
 
 
+
+class Exp(ad.base.UnaryOp):
+    op = "exp"
+
+    @staticmethod
+    def _call(x):
+        return math.exp(x)
+    
+    @staticmethod
+    def _derivative(x):
+        return ad.exp(x)
+
 class NaturalLog(ad.base.UnaryOp):
     op = "ln"
 
@@ -56,7 +68,10 @@ class Cbrt(ad.base.UnaryOp):
         return 1 / (3 * ad.cbrt(x) ** 2)
 
 
+exp = Exp
 ln = NaturalLog
 lg = Log10
 sqrt = Sqrt
 cbrt = Cbrt
+
+__all__ = ["exp", "ln", "lg", "sqrt", "cbrt"]
