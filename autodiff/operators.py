@@ -65,17 +65,18 @@ class MultiAdd(ad.base.MultiOp):
         res = []
         for var in self.vars:
             res.append("-" if ad._isneg(var) else "+")
-            
+
             var = ad._abs(var)
             if var.priority == -1 or var.priority > self.priority:
                 res.append(f"{var}")
             else:
                 res.append(f"({var})")
-        
+
         if ad._isinv(self.vars[0]):
             res[1] = "-" + res[1]
         del res[0]
         return f" ".join(res)
+
 
 class MultiMul(ad.base.MultiOp):
     op = "*"
@@ -87,24 +88,23 @@ class MultiMul(ad.base.MultiOp):
 
     @staticmethod
     def _derivative(vars):
-        return [MultiMul(*vars[:i], *vars[i+1:]) for i in range(len(vars))]
-    
+        return [MultiMul(*vars[:i], *vars[i + 1 :]) for i in range(len(vars))]
+
     def __str__(self):
         if not self.vars:
             return "1"
         res = []
         for var in self.vars:
             res.append("/" if ad._isinv(var) else "*")
-            
+
             var = ad._abs_inv(var)
             if var.priority == -1 or var.priority > self.priority:
                 res.append(f"{var}")
             else:
                 res.append(f"({var})")
-        
+
         if ad._isinv(self.vars[0]):
             res.insert(0, "1")
         else:
             del res[0]
         return f" ".join(res)
-

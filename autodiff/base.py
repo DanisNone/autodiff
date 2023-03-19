@@ -16,7 +16,6 @@ class BaseOp(ABC):
     def derivative(self, var: BaseOp) -> BaseOp:
         pass
 
-
     @abstractmethod
     def get_ops(self) -> List[BaseOp]:
         pass
@@ -72,12 +71,13 @@ class Variable(BaseOp):
             return vars[self.name]
         except KeyError:
             raise ValueError(f"Value is not specified for {self.name}")
-    
+
     def derivative(self, var):
         return IntConst(self == var)
-    
+
     def get_ops(self):
         return []
+
     def __str__(self):
         return self.name
 
@@ -96,9 +96,10 @@ class Const(BaseOp):
 
     def derivative(self, var):
         return IntConst(0)
- 
+
     def get_ops(self):
         return []
+
     def __str__(self):
         return str(self.value)
 
@@ -152,7 +153,7 @@ class UnaryOp(BaseOp):
 
     def get_ops(self):
         return [self.x]
-    
+
     def __str__(self):
         s = str(self.x)
         if not (s.startswith("(") and s.startswith(")")):
@@ -189,7 +190,7 @@ class BinaryOp(BaseOp):
 
     def get_ops(self):
         return [self.x, self.y]
-    
+
     def __str__(self):
         s1, s2 = str(self.x), str(self.y)
         if isinstance(self.x, (BinaryOp, MultiOp)):
@@ -212,6 +213,7 @@ class BinaryOp(BaseOp):
     def _derivative(x: BaseOp, y: BaseOp) -> Tuple[BaseOp, BaseOp]:
         pass
 
+
 class MultiOp(BaseOp):
     def __init__(self, *vars: BaseOp):
         self.vars = list(map(to_op, vars))
@@ -224,10 +226,10 @@ class MultiOp(BaseOp):
         vars = [var_.derivative(var) for var_ in self.vars]
 
         return sum(map(ad.operators.MultiMul, derivatives, vars))
-    
+
     def get_ops(self):
         return self.vars
-    
+
     def __eq__(self, other):
         return isinstance(other, type(self)) and self.vars == other.vars
 

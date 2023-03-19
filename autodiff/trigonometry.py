@@ -3,7 +3,6 @@ import math
 import autodiff as ad
 
 
-
 class Sin(ad.base.UnaryOp):
     op = "sin"
 
@@ -39,6 +38,7 @@ class Tg(ad.base.UnaryOp):
     def _derivative(x):
         return 1 / (ad.cos(x) ** 2)
 
+
 class Ctg(ad.base.UnaryOp):
     op = "ctg"
 
@@ -49,6 +49,7 @@ class Ctg(ad.base.UnaryOp):
     @staticmethod
     def _derivative(x):
         return -1 / (ad.sin(x) ** 2)
+
 
 class ArcSin(ad.base.UnaryOp):
     op = "arcsin"
@@ -61,7 +62,7 @@ class ArcSin(ad.base.UnaryOp):
 
     @staticmethod
     def _derivative(x):
-        return 1 / ad.sqrt(1 - x ** 2)
+        return 1 / ad.sqrt(1 - x**2)
 
 
 class ArcCos(ad.base.UnaryOp):
@@ -75,7 +76,7 @@ class ArcCos(ad.base.UnaryOp):
 
     @staticmethod
     def _derivative(x):
-        return -1 / ad.sqrt(1 - x ** 2)
+        return -1 / ad.sqrt(1 - x**2)
 
 
 class ArcTg(ad.base.UnaryOp):
@@ -87,8 +88,7 @@ class ArcTg(ad.base.UnaryOp):
 
     @staticmethod
     def _derivative(x):
-        return 1 / (1 + x ** 2)
-
+        return 1 / (1 + x**2)
 
 
 class ArcCtg(ad.base.UnaryOp):
@@ -100,8 +100,7 @@ class ArcCtg(ad.base.UnaryOp):
 
     @staticmethod
     def _derivative(x):
-        return -1 / (1 + x ** 2)
-    
+        return -1 / (1 + x**2)
 
 
 sin = Sin
@@ -115,4 +114,4 @@ arccos = ArcCos
 arctg = ArcTg
 arcctg = ArcCtg
 
-__all__ = ["sin", "cos", "tg", "ctg", "arcsin","arccos", "arctg", "arcctg"]
+__all__ = ["sin", "cos", "tg", "ctg", "arcsin", "arccos", "arctg", "arcctg"]
