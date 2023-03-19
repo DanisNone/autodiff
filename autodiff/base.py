@@ -16,8 +16,10 @@ class BaseOp(ABC):
     def derivative(self, var: BaseOp) -> BaseOp:
         pass
 
-    def optimize(self) -> BaseOp:
-        return self
+
+    @abstractmethod
+    def get_ops(self) -> List[BaseOp]:
+        pass
 
     @abstractmethod
     def __str__(self) -> str:
@@ -31,31 +33,31 @@ class BaseOp(ABC):
         return ad.operators.Neg(self)
 
     def __add__(self, other) -> BaseOp:
-        return ad.operators.Add(self, other)
+        return ad.operators.MultiAdd(self, other)
 
     def __sub__(self, other) -> BaseOp:
-        return ad.operators.Sub(self, other)
+        return ad.operators.MultiAdd(self, -other)
 
     def __mul__(self, other) -> BaseOp:
-        return ad.operators.Mul(self, other)
+        return ad.operators.MultiMul(self, other)
 
     def __truediv__(self, other) -> BaseOp:
-        return ad.operators.Div(self, other)
+        return ad.operators.MultiMul(self, ad.operators.Inv(other))
 
     def __pow__(self, other) -> BaseOp:
         return ad.operators.Pow(self, other)
 
     def __radd__(self, other) -> BaseOp:
-        return ad.operators.Add(other, self)
+        return ad.operators.MultiAdd(other, self)
 
     def __rsub__(self, other) -> BaseOp:
-        return ad.operators.Sub(other, self)
+        return ad.operators.MultiAdd(other, -self)
 
     def __rmul__(self, other) -> BaseOp:
-        return ad.operators.Mul(other, self)
+        return ad.operators.MultiMul(other, self)
 
     def __rtruediv__(self, other) -> BaseOp:
-        return ad.operators.Div(other, self)
+        return ad.operators.MultiMul(other, ad.operators.Inv(self))
 
     def __rpow__(self, other) -> BaseOp:
         return ad.operators.Pow(other, self)
@@ -70,14 +72,18 @@ class Variable(BaseOp):
             return vars[self.name]
         except KeyError:
             raise ValueError(f"Value is not specified for {self.name}")
-
+    
     def derivative(self, var):
         return IntConst(self == var)
     
+    def get_ops(self):
+        return []
     def __str__(self):
         return self.name
 
     def __eq__(self, other):
+        if isinstance(other, str):
+            other = Variable(other)
         return isinstance(other, Variable) and self.name == other.name
 
 
@@ -90,16 +96,15 @@ class Const(BaseOp):
 
     def derivative(self, var):
         return IntConst(0)
-    
-    def optimize(self):
-        if isinstance(self.value, int) or self.value.is_integer():
-            return IntConst(int(self.value))
-        return self
-    
+ 
+    def get_ops(self):
+        return []
     def __str__(self):
         return str(self.value)
 
     def __eq__(self, other):
+        if isinstance(other, float):
+            other = Const(other)
         return (
             isinstance(other, Const)
             and not isinstance(other, IntConst)
@@ -115,6 +120,8 @@ class IntConst(Const):
         return float(self.value)
 
     def __eq__(self, other):
+        if isinstance(other, int):
+            other = IntConst(other)
         return isinstance(other, IntConst) and self.value == other.value
 
 
@@ -142,9 +149,9 @@ class UnaryOp(BaseOp):
 
     def derivative(self, var):
         return self._derivative(self.x) * self.x.derivative(var)
-    
-    def optimize(self):
-        return type(self)(self.x.optimize())
+
+    def get_ops(self):
+        return [self.x]
     
     def __str__(self):
         s = str(self.x)
@@ -179,15 +186,15 @@ class BinaryOp(BaseOp):
     def derivative(self, var):
         dx, dy = self._derivative(self.x, self.y)
         return dx * self.x.derivative(var) + dy * self.y.derivative(var)
-    
-    def optimize(self):
-        return type(self)(self.x.optimize(), self.y.optimize())
+
+    def get_ops(self):
+        return [self.x, self.y]
     
     def __str__(self):
         s1, s2 = str(self.x), str(self.y)
-        if isinstance(self.x, BinaryOp):
+        if isinstance(self.x, (BinaryOp, MultiOp)):
             s1 = f"({s1})"
-        if isinstance(self.y, BinaryOp):
+        if isinstance(self.y, (BinaryOp, MultiOp)):
             s2 = f"({s2})"
 
         return f"{s1} {self.op} {s2}"
@@ -206,7 +213,7 @@ class BinaryOp(BaseOp):
         pass
 
 class MultiOp(BaseOp):
-    def __init__(self, vars: List[BaseOp]):
+    def __init__(self, *vars: BaseOp):
         self.vars = list(map(to_op, vars))
 
     def call(self, vars):
@@ -216,19 +223,11 @@ class MultiOp(BaseOp):
         derivatives = self._derivative(self.vars)
         vars = [var_.derivative(var) for var_ in self.vars]
 
-        return sum(map(ad.operators.Mul, derivatives, vars))
-
-    def optimize(self):
-        self = type(self)([var.optimize() for var in self.vars])
-        vars = []
-
-        for var in self.vars:
-            if isinstance(var, type(self)):
-                vars.extend(var.vars)
-            else:
-                vars.append(var)
-        return type(self)(vars)
-
+        return sum(map(ad.operators.MultiMul, derivatives, vars))
+    
+    def get_ops(self):
+        return self.vars
+    
     def __eq__(self, other):
         return isinstance(other, type(self)) and self.vars == other.vars
 
@@ -241,11 +240,3 @@ class MultiOp(BaseOp):
     @abstractmethod
     def _derivative(vars: List[BaseOp]) -> List[BaseOp]:
         pass
-
-
-def optimize(op: BaseOp) -> BaseOp:
-    while True:
-        new_op = op.optimize()
-        if op == new_op:
-            return op
-        op = new_op
