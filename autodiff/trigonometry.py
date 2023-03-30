@@ -1,106 +1,102 @@
-import math
+import cmath
 
 import autodiff as ad
 
 
-class Sin(ad.base.UnaryOp):
-    op = "sin"
+class Sin(ad.Function):
+    name = "sin"
 
     @staticmethod
-    def _call(x):
-        return math.sin(x)
+    def _func_call(x):
+        return cmath.sin(x)
 
     @staticmethod
-    def _derivative(x):
-        return ad.cos(x)
+    def _func_derivative(op):
+        return ad.cos(op)
 
 
-class Cos(ad.base.UnaryOp):
-    op = "cos"
-
-    @staticmethod
-    def _call(x):
-        return math.cos(x)
+class Cos(ad.Function):
+    name = "cos"
 
     @staticmethod
-    def _derivative(x):
-        return -ad.sin(x)
-
-
-class Tg(ad.base.UnaryOp):
-    op = "tg"
+    def _func_call(x):
+        return cmath.cos(x)
 
     @staticmethod
-    def _call(x):
-        return math.tan(x)
+    def _func_derivative(op):
+        return -ad.sin(op)
+
+
+class Tg(ad.Function):
+    name = "tg"
 
     @staticmethod
-    def _derivative(x):
-        return 1 / (ad.cos(x) ** 2)
-
-
-class Ctg(ad.base.UnaryOp):
-    op = "ctg"
+    def _func_call(x):
+        return cmath.tan(x)
 
     @staticmethod
-    def _call(x):
-        return 1 / math.tan(x)
+    def _func_derivative(op):
+        return 1 / (ad.cos(op) ** 2)
+
+
+class Ctg(ad.Function):
+    name = "ctg"
 
     @staticmethod
-    def _derivative(x):
-        return -1 / (ad.sin(x) ** 2)
-
-
-class ArcSin(ad.base.UnaryOp):
-    op = "arcsin"
+    def _func_call(x):
+        return 1 / cmath.tan(x)
 
     @staticmethod
-    def _call(x):
-        if x < -1 or x > 1:
-            return ad.nan
-        return math.asin(x)
+    def _func_derivative(op):
+        return -1 / (ad.sin(op) ** 2)
+
+
+class ArcSin(ad.Function):
+    name = "arcsin"
 
     @staticmethod
-    def _derivative(x):
-        return 1 / ad.sqrt(1 - x**2)
-
-
-class ArcCos(ad.base.UnaryOp):
-    op = "arccos"
+    def _func_call(x):
+        return cmath.asin(x)
 
     @staticmethod
-    def _call(x):
-        if x < -1 or x > 1:
-            return ad.nan
-        return math.acos(x)
+    def _func_derivative(op):
+        return 1 / ad.sqrt(1 - op**2)
+
+
+class ArcCos(ad.Function):
+    name = "arccos"
 
     @staticmethod
-    def _derivative(x):
-        return -1 / ad.sqrt(1 - x**2)
-
-
-class ArcTg(ad.base.UnaryOp):
-    op = "arctg"
+    def _func_call(x):
+        return cmath.acos(x)
 
     @staticmethod
-    def _call(x):
-        return math.atan(x)
+    def _func_derivative(op):
+        return -1 / ad.sqrt(1 - op**2)
+
+
+class ArcTg(ad.Function):
+    name = "arctg"
 
     @staticmethod
-    def _derivative(x):
-        return 1 / (1 + x**2)
-
-
-class ArcCtg(ad.base.UnaryOp):
-    op = "arcctg"
+    def _func_call(x):
+        return cmath.atan(x)
 
     @staticmethod
-    def _call(x):
-        return math.atan(1 / x)
+    def _func_derivative(op):
+        return 1 / (1 + op**2)
+
+
+class ArcCtg(ad.Function):
+    name = "arcctg"
 
     @staticmethod
-    def _derivative(x):
-        return -1 / (1 + x**2)
+    def _func_call(x):
+        return cmath.atan(1 / x)
+
+    @staticmethod
+    def _func_derivative(op):
+        return -1 / (1 + op**2)
 
 
 sin = Sin

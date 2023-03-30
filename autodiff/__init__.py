@@ -1,44 +1,55 @@
+import math
+import builtins
+
 import autodiff as ad
 
 from autodiff import base
+from autodiff.base import *
+
 from autodiff import operators
 
-
-from autodiff.base import Variable, Const, IntConst
+from autodiff import functions
 from autodiff.functions import *
+
+from autodiff import trigonometry
 from autodiff.trigonometry import *
 
-
-nan = float("nan")
-
-
-def isnan(n: float) -> bool:
-    return isinstance(n, float) and (n != n)
+from autodiff import simplify
+from autodiff.simplify import *
 
 
-def _isneg(x: ad.base.BaseOp) -> bool:
-    if isinstance(x, ad.Const):
-        return x.value < 0
-    return isinstance(x, ad.operators.Neg)
+def _is_neg(op: Base) -> bool:
+    if isinstance(op, (FloatConst, IntConst)):
+        return op.value < 0
+    return isinstance(op, ad.operators.Neg)
 
 
-def _isinv(x: ad.base.BaseOp) -> bool:
-    return isinstance(x, ad.operators.Inv)
+def _abs(op: Base) -> Base:
+    if isinstance(op, (FloatConst, IntConst)):
+        return type(op)(builtins.abs(op.value)) # type: ignore
+    if isinstance(op, ad.operators.Neg):
+        return op.op
+    return op
 
 
-def _abs(x: ad.base.BaseOp) -> ad.base.BaseOp:
-    if isinstance(x, ad.Const):
-        return type(x)(abs(x.value))
-    if isinstance(x, ad.operators.Neg):
-        return x.x
-    return x
+def _is_inv(op: Base) -> bool:
+    return isinstance(op, ad.operators.Inv)
 
 
-def _abs_inv(x: ad.base.BaseOp) -> ad.base.BaseOp:
-    if isinstance(x, ad.operators.Inv):
-        return x.x
-    return x
+def _abs_inv(op: Base) -> Base:
+    if isinstance(op, ad.operators.Inv):
+        return op.op
+    return op
 
 
-def _is_const(x: ad.base.BaseOp) -> bool:
-    return isinstance(x, ad.Const)
+def _is_const(op: Base) -> bool:
+    return isinstance(op, (ComplexConst, FloatConst, IntConst))
+
+def _is_constant(op: Base) -> bool:
+    return isinstance(op, ad.Constant)
+
+
+def _to_float(value: complex) -> float:
+    if math.isclose(value.imag, 0.0):
+        return value.real
+    return float("nan")

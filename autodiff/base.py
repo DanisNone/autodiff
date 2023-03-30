@@ -1,25 +1,36 @@
 from __future__ import annotations
-from functools import reduce
-import autodiff as ad
 from abc import ABC, abstractmethod
-from typing import Dict, List, Tuple, Union
+from typing import Dict, Union, Tuple, List
+import functools
+import math
+
+import autodiff as ad
 
 
-class BaseOp(ABC):
+class Base(ABC):
     priority: int = -1
-
+    name: str = None # type: ignore
+    
     @abstractmethod
-    def call(self, vars: Dict[str, float]) -> float:
+    def _call(self, vars: Dict[str, Union[complex, float, int]]) -> complex:
         pass
 
     @abstractmethod
-    def derivative(self, var: BaseOp) -> BaseOp:
+    def _derivative(self, var: Variable) -> Base:
         pass
 
     @abstractmethod
-    def get_ops(self) -> List[BaseOp]:
+    def get_operands(self) -> List[Base]:
         pass
 
+    @abstractmethod
+    def get_variables(self) -> set[Variable]:
+        pass
+    
+    @abstractmethod
+    def copy(self) -> Base:
+        pass
+    
     @abstractmethod
     def __str__(self) -> str:
         pass
@@ -27,98 +38,186 @@ class BaseOp(ABC):
     @abstractmethod
     def __eq__(self, other) -> bool:
         pass
+    
+    def call(
+        self, vars: Dict[str, Union[complex, float, int]] = {}, **kwargs
+    ) -> complex:
+        vars = {**vars, **kwargs}
+        try:
+            return complex(self._call(vars))
+        except (ValueError, ArithmeticError):
+            return float("nan")
 
-    def __neg__(self):
+    def fcall(
+        self, vars: Dict[str, Union[complex, float, int]] = {}, **kwargs
+    ) -> float:
+        return ad._to_float(self.call(vars, **kwargs))
+        
+
+    def derivative(self, *vars: Union[Tuple[Variable, int], Variable]) -> Base:
+        for var in vars:
+            if isinstance(var, tuple):
+                var, k = var
+            else:
+                k = 1
+            if not isinstance(var, Variable):
+                raise TypeError(f"var must be Variable, not {type(var)}")
+            for i in range(k):
+                self = self._derivative(var).simplify()
+        return self
+    
+    def simplify(self):
+        return ad.simplify.basesimp(self)
+    
+    def __neg__(self) -> Base:
         return ad.operators.Neg(self)
 
-    def __add__(self, other) -> BaseOp:
-        return ad.operators.MultiAdd(self, other)
+    def __add__(self, other) -> Base:
+        return ad.operators.Add(self, other)
 
-    def __sub__(self, other) -> BaseOp:
-        return ad.operators.MultiAdd(self, -other)
+    def __radd__(self, other) -> Base:
+        return ad.operators.Add(other, self)
 
-    def __mul__(self, other) -> BaseOp:
-        return ad.operators.MultiMul(self, other)
+    def __sub__(self, other) -> Base:
+        return ad.operators.Add(self, -other)
 
-    def __truediv__(self, other) -> BaseOp:
-        return ad.operators.MultiMul(self, ad.operators.Inv(other))
+    def __rsub__(self, other) -> Base:
+        return ad.operators.Add(other, -self)
 
-    def __pow__(self, other) -> BaseOp:
+    def __mul__(self, other) -> Base:
+        return ad.operators.Mul(self, other)
+
+    def __rmul__(self, other) -> Base:
+        return ad.operators.Mul(other, self)
+
+    def __truediv__(self, other) -> Base:
+        return ad.operators.Mul(self, ad.operators.Inv(other))
+
+    def __rtruediv__(self, other) -> Base:
+        return ad.operators.Mul(other, ad.operators.Inv(self))
+    
+    def __pow__(self, other) -> Base:
         return ad.operators.Pow(self, other)
-
-    def __radd__(self, other) -> BaseOp:
-        return ad.operators.MultiAdd(other, self)
-
-    def __rsub__(self, other) -> BaseOp:
-        return ad.operators.MultiAdd(other, -self)
-
-    def __rmul__(self, other) -> BaseOp:
-        return ad.operators.MultiMul(other, self)
-
-    def __rtruediv__(self, other) -> BaseOp:
-        return ad.operators.MultiMul(other, ad.operators.Inv(self))
-
-    def __rpow__(self, other) -> BaseOp:
+    def __rpow__(self, other) -> Base:
         return ad.operators.Pow(other, self)
+        
 
 
-class Variable(BaseOp):
+class Variable(Base):
+    name = "variable"
     def __init__(self, name: str):
-        self.name = str(name)
+        self.var_name = str(name)
 
-    def call(self, vars):
+    def _call(self, vars):
         try:
-            return vars[self.name]
+            return complex(vars[self.name])
         except KeyError:
-            raise ValueError(f"Value is not specified for {self.name}")
+            raise ValueError(f"unknown variable: {self.var_name}")
 
-    def derivative(self, var):
-        return IntConst(self == var)
+    def _derivative(self, var):
+        return Const(self == var)
 
-    def get_ops(self):
+    def get_operands(self):
         return []
 
+    def get_variables(self):
+        return {self}
+    
+    def copy(self):
+        return Variable(self.var_name)
+    
     def __str__(self):
-        return self.name
+        return self.var_name
 
     def __eq__(self, other):
         if isinstance(other, str):
             other = Variable(other)
-        return isinstance(other, Variable) and self.name == other.name
+        return isinstance(other, Variable) and self.var_name == other.var_name
+
+    def __hash__(self):
+        return hash(self.var_name)
 
 
-class Const(BaseOp):
+class ComplexConst(Base):
+    name = "complexconst"
+    def __init__(self, value: complex):
+        self.value = complex(value)
+
+    def _call(self, vars):
+        return self.value
+
+    def _derivative(self, var):
+        return Const(0)
+
+    def get_operands(self):
+        return []
+
+    def get_variables(self):
+        return {}
+    
+    def copy(self):
+        return ComplexConst(self.value)
+
+    def __str__(self):
+        return str(self.value)
+
+    def __eq__(self, other):
+        if isinstance(other, complex):
+            other = ComplexConst(other)
+        return isinstance(other, ComplexConst) and self.value == other.value
+
+
+class FloatConst(Base):
+    name = "floatconst"
     def __init__(self, value: float):
         self.value = float(value)
 
-    def call(self, vars):
+    def _call(self, vars):
         return self.value
 
-    def derivative(self, var):
-        return IntConst(0)
+    def _derivative(self, var):
+        return Const(0)
 
-    def get_ops(self):
+    def get_operands(self):
         return []
+
+    def get_variables(self):
+        return {}
+    
+    def copy(self):
+        return FloatConst(self.value)
 
     def __str__(self):
         return str(self.value)
 
     def __eq__(self, other):
         if isinstance(other, float):
-            other = Const(other)
-        return (
-            isinstance(other, Const)
-            and not isinstance(other, IntConst)
-            and self.value == other.value
-        )
+            other = FloatConst(other)
+        return isinstance(other, FloatConst) and self.value == other.value
 
 
-class IntConst(Const):
+class IntConst(Base):
+    name = "intconst"
     def __init__(self, value: int):
         self.value = int(value)
 
-    def call(self, vars):
-        return float(self.value)
+    def _call(self, vars):
+        return self.value
+
+    def _derivative(self, var):
+        return Const(0)
+
+    def get_operands(self):
+        return []
+
+    def get_variables(self):
+        return {}
+    
+    def copy(self):
+        return IntConst(self.value)
+
+    def __str__(self):
+        return str(self.value)
 
     def __eq__(self, other):
         if isinstance(other, int):
@@ -126,119 +225,69 @@ class IntConst(Const):
         return isinstance(other, IntConst) and self.value == other.value
 
 
-def to_op(obj: Union[BaseOp, str, float, int]) -> BaseOp:
-    if isinstance(obj, BaseOp):
-        return obj
+class Constant(Base):
+    name = "constant"
+    
+    def __init__(self, name: str, value: float):
+        self.const_name = name
+        self.value = float(value)
+    
+    def _call(self, vars):
+        return self.value
+
+    def _derivative(self, var):
+        return Const(0)
+
+    def get_operands(self):
+        return []
+
+    def get_variables(self):
+        return {}
+    
+    def copy(self):
+        return Constant(self.const_name, self.value)
+
+    def __str__(self):
+        return self.const_name
+
+    def __eq__(self, other):
+        if not isinstance(other, Constant):
+            return False
+        return self.const_name == other.const_name and self.value == other.value
+
+ 
+def Const(value: Union[complex, float, int]) -> Base:
+    if isinstance(value, complex):
+        return ComplexConst(value)
+    if isinstance(value, float):
+        return FloatConst(value)
+    if isinstance(value, int):
+        return IntConst(value)
+    raise TypeError(f"Type {type(value)} cannot be converted to a constant")
+
+
+def to_op(obj: Union[complex, float, int, str, Base]) -> Base:
+    if isinstance(obj, (complex, float, int)):
+        return Const(obj)
     if isinstance(obj, str):
         return Variable(obj)
-    if isinstance(obj, float):
-        return Const(obj)
-    if isinstance(obj, int):
-        return IntConst(obj)
-
-    raise TypeError(f"Unsupported type: {type(obj)}")
+    if isinstance(obj, Base):
+        return obj
+    raise TypeError(f"Type {type(obj)} cannot be converted to a Base class")
 
 
-class UnaryOp(BaseOp):
-    op: str = None  # type: ignore
 
-    def __init__(self, x):
-        self.x = to_op(x)
+e = Constant("e", 2.718281828459045)
 
-    def call(self, vars):
-        return self._call(self.x.call(vars))
-
-    def derivative(self, var):
-        return self._derivative(self.x) * self.x.derivative(var)
-
-    def get_ops(self):
-        return [self.x]
-
-    def __str__(self):
-        s = str(self.x)
-        if not (s.startswith("(") and s.startswith(")")):
-            s = f"({s})"
-        return f"{self.op}{s}"
-
-    def __eq__(self, other):
-        return isinstance(other, type(self)) and self.x == other.x
-
-    @staticmethod
-    @abstractmethod
-    def _call(x: float) -> float:
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def _derivative(x: BaseOp) -> BaseOp:
-        pass
-
-
-class BinaryOp(BaseOp):
-    op: str = None  # type: ignore
-
-    def __init__(self, x, y):
-        self.x = to_op(x)
-        self.y = to_op(y)
-
-    def call(self, vars):
-        return self._call(self.x.call(vars), self.y.call(vars))
-
-    def derivative(self, var):
-        dx, dy = self._derivative(self.x, self.y)
-        return dx * self.x.derivative(var) + dy * self.y.derivative(var)
-
-    def get_ops(self):
-        return [self.x, self.y]
-
-    def __str__(self):
-        s1, s2 = str(self.x), str(self.y)
-        if isinstance(self.x, (BinaryOp, MultiOp)):
-            s1 = f"({s1})"
-        if isinstance(self.y, (BinaryOp, MultiOp)):
-            s2 = f"({s2})"
-
-        return f"{s1} {self.op} {s2}"
-
-    def __eq__(self, other):
-        return isinstance(other, type(self)) and self.x == other.x and self.y == other.y
-
-    @staticmethod
-    @abstractmethod
-    def _call(x: float, y: float) -> float:
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def _derivative(x: BaseOp, y: BaseOp) -> Tuple[BaseOp, BaseOp]:
-        pass
-
-
-class MultiOp(BaseOp):
-    def __init__(self, *vars: BaseOp):
-        self.vars = list(map(to_op, vars))
-
-    def call(self, vars):
-        return self._call([var.call(vars) for var in self.vars])
-
-    def derivative(self, var):
-        derivatives = self._derivative(self.vars)
-        vars = [var_.derivative(var) for var_ in self.vars]
-
-        return sum(map(ad.operators.MultiMul, derivatives, vars))
-
-    def get_ops(self):
-        return self.vars
-
-    def __eq__(self, other):
-        return isinstance(other, type(self)) and self.vars == other.vars
-
-    @staticmethod
-    @abstractmethod
-    def _call(vars: List[float]) -> float:
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def _derivative(vars: List[BaseOp]) -> List[BaseOp]:
-        pass
+__all__ = [
+    "Base",
+    "Variable",
+    "Const",
+    "ComplexConst",
+    "FloatConst",
+    "IntConst",
+    "Constant",
+    "to_op",
+    
+    "e",
+]
