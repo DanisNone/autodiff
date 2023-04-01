@@ -212,6 +212,38 @@ class BaseSimp(Simplifier):
             return 1 / (op1 ** ad._abs(op2))
         if isinstance(op1, ad.operators.Pow):
             return op1.base ** (op1.power * op2)
+
+    def multiadd(self, *ops):
+        powers = []
+        for op in ops:
+            if ad._is_neg(op):
+                op = ad._abs(op)
+            if isinstance(op, ad.operators.Mul):
+                operands = op.get_operands()
+                power = -1
+
+                for i in range(len(operands)):
+                    _, power_ = _get_power(operands[i])
+                    power_ = power_.value if isinstance(power_, (ad.FloatConst, ad.IntConst)) else 0
+                    power = max(power, power_)
+                powers.append(power)
+            else:
+                _, power_ = _get_power(op)
+                powers.append(power_.value if isinstance(power_, (ad.FloatConst, ad.IntConst)) else 0)
+        
+        ops = [b for a, b in sorted(zip(powers, ops), key=lambda el:-el[0])]
+        return super(BaseSimp, self).multiadd(*ops)
+    
+    def multimul(self, *ops):
+        ops = list(ops)
+        index = None
+        for i in range(len(ops)):
+            if ad._is_const(ops[i]):
+                index = i
+                break
+        if index:
+            ops.insert(0, ops.pop(index))
+        return super(BaseSimp, self).multimul(*ops)
     
     def ln(self, op):
         if ad._is_constant(op) and op.const_name == "e":
